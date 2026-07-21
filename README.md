@@ -69,7 +69,7 @@ The caller owns all I/O: gather candidates from your stores, map them into
 ## The formula
 
 ```
-score = freshness × (0.35·engagement + 0.30·affinity + 0.20·topic + 0.15·social_proof) × modifiers
+score = freshness × (0.35·engagement + 0.30·affinity + 0.20·topic + 0.15·social_proof + 0.10·search_trend) × modifiers
 ```
 
 | Term | Meaning |
@@ -78,11 +78,12 @@ score = freshness × (0.35·engagement + 0.30·affinity + 0.20·topic + 0.15·so
 | affinity | your history with the author (+ follow bonus) |
 | topic | Jaccard overlap between your interests and the post's topics |
 | social_proof | how many accounts you follow engaged with it |
+| search_trend | what the whole network is searching right now (aggregate topic heat via `TrendingTopics`); your own recent searches join the topic term via `SearchInterests` |
 | freshness | `exp(-age/8h)` decay |
 
 Modifiers: seen ×0.1 · not-interested topic ×0.2 · stranger-reply ×0.3 ·
 moderation labels (stackable) · prolific-author damp `sqrt(threshold/count)` ·
-"show more like this" ×1.5 · mentions-you ×2.
+"show more like this" ×1.5 · mentions-you ×2 · language mismatch ×0.5.
 
 Page rules: max 2 posts per author, ~50 % in-network quota, no 3-in-a-row
 same topic, and every 10th slot reserved for exploration (seeded, stable
@@ -104,12 +105,22 @@ cfg := feedrank.BuiltinProfiles()["discover"]
 cfg, err := feedrank.ConfigFromJSON(raw) // or define your own (unknown fields rejected)
 ```
 
-## Topics, not hashtags
+## Topics, hashtags, mentions, and search — i18n included
 
 Ranking never consumes raw hashtags. `PostTopics` maps them onto a canonical
-taxonomy (with ~180 built-in English/Japanese aliases — `#音楽`→`music`,
-`#ラーメン`→`food`) and unmapped tags contribute nothing, so tag spam cannot
-game the feed.
+taxonomy — ~350 built-in aliases across ten language groups (en, ja, ko, zh,
+es, hi, vi, fr, de, pt: `#音楽`→`music`, `#맛집`→`food`, `#fútbol`→`sports`)
+— and unmapped tags contribute nothing, so tag spam cannot game the feed.
+Extraction is Unicode-aware, so hashtags in any language extract.
+
+- `ExtractMentions` pulls `@handles` (Unicode) so callers can set the
+  mentions-you boost.
+- `MapQuery` turns free-text search queries into topics: feed a user's own
+  searches back as `SearchInterests`, and aggregate everyone's searches into
+  `TrendingTopics` so the feed reflects what the network is looking for
+  (aggregate counts only — individual queries never reach the ranker).
+- Post `Language` + viewer `Languages` down-rank posts the viewer can't read;
+  unknown languages are never penalized.
 
 ## Testing
 

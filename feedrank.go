@@ -43,6 +43,9 @@ type Post struct {
 	Topics []string
 	// Labels are moderation labels matched against Config.LabelPenalties.
 	Labels []string
+	// Language is the post's lowercase primary language tag ("ja", "en");
+	// "" = unknown (never penalized).
+	Language string
 
 	IsReply         bool
 	ReplyToAuthorID string
@@ -69,6 +72,15 @@ type UserContext struct {
 	NotInterestedTopics  map[string]bool
 	NotInterestedAuthors map[string]bool
 	MoreInterestedTopics map[string]bool
+	// Languages is the set of languages the viewer reads; empty disables
+	// language matching.
+	Languages map[string]bool
+	// SearchInterests are topics derived from the viewer's own recent
+	// searches (see MapQuery); they join Interests in the topic term.
+	SearchInterests []string
+	// TrendingTopics is the network-wide search heat per topic in [0,1],
+	// aggregated by the caller from all users' search queries.
+	TrendingTopics map[string]float64
 }
 
 // Breakdown decomposes a score: Score = Freshness × Core × Penalty.
@@ -78,6 +90,7 @@ type Breakdown struct {
 	Affinity    float64 `json:"affinity"`
 	Topic       float64 `json:"topic"`
 	SocialProof float64 `json:"social_proof"`
+	Trending    float64 `json:"trending"`
 	Core        float64 `json:"core"`
 	Freshness   float64 `json:"freshness"`
 	Penalty     float64 `json:"penalty"`
@@ -151,13 +164,15 @@ func dedupe(candidates []Candidate) []Candidate {
 func score(cfg Config, user UserContext, c Candidate, now time.Time) Ranked {
 	eng := engagementScore(cfg, c.Post)
 	aff := affinityScore(cfg, user, c.AuthorID)
-	top, matchedTopic := topicScore(user.Interests, c.Topics)
+	top, matchedTopic := topicScore(mergeInterests(user.Interests, user.SearchInterests), c.Topics)
 	proof := socialProofScore(cfg, c.EngagedFollows)
+	trend := trendingScore(c.Topics, user.TrendingTopics)
 
 	core := cfg.Weights.Engagement*eng +
 		cfg.Weights.Affinity*aff +
 		cfg.Weights.Topic*top +
-		cfg.Weights.SocialProof*proof
+		cfg.Weights.SocialProof*proof +
+		cfg.Weights.Trending*trend
 
 	fresh := freshness(cfg, now.Sub(c.CreatedAt))
 
@@ -186,6 +201,10 @@ func score(cfg Config, user UserContext, c Candidate, now time.Time) Ranked {
 	if cfg.ProlificDampThreshold > 0 && c.AuthorPostsLast24h > cfg.ProlificDampThreshold {
 		penalty *= math.Sqrt(float64(cfg.ProlificDampThreshold) / float64(c.AuthorPostsLast24h))
 	}
+	if cfg.LanguageMismatchPenalty < 1 && c.Language != "" &&
+		len(user.Languages) > 0 && !user.Languages[c.Language] {
+		penalty *= cfg.LanguageMismatchPenalty
+	}
 
 	r := Ranked{
 		Candidate: c,
@@ -195,14 +214,37 @@ func score(cfg Config, user UserContext, c Candidate, now time.Time) Ranked {
 			Affinity:    aff,
 			Topic:       top,
 			SocialProof: proof,
+			Trending:    trend,
 			Core:        core,
 			Freshness:   fresh,
 			Penalty:     penalty,
 		},
 	}
 	r.Breakdown.Score = r.Score
-	r.Reasons = reasons(user, c, matchedTopic, boosted)
+	r.Reasons = reasons(user, c, matchedTopic, boosted, trend > 0)
 	return r
+}
+
+func mergeInterests(a, b []string) []string {
+	if len(b) == 0 {
+		return a
+	}
+	if len(a) == 0 {
+		return b
+	}
+	out := make([]string, 0, len(a)+len(b))
+	return append(append(out, a...), b...)
+}
+
+// trendingScore is the best network-wide search heat among the post's topics.
+func trendingScore(topics []string, trending map[string]float64) float64 {
+	best := 0.0
+	for _, t := range topics {
+		if v := trending[t]; v > best {
+			best = v
+		}
+	}
+	return math.Max(0, math.Min(1, best))
 }
 
 // engagementScore log-damps weighted engagement and saturates at
@@ -286,7 +328,7 @@ func freshness(cfg Config, age time.Duration) float64 {
 	return math.Max(cfg.FreshnessFloor, math.Exp(-age.Hours()/cfg.FreshnessTauHours))
 }
 
-func reasons(user UserContext, c Candidate, matchedTopic string, boosted bool) []string {
+func reasons(user UserContext, c Candidate, matchedTopic string, boosted, trending bool) []string {
 	var out []string
 	if c.MentionsViewer {
 		out = append(out, "mentions_you")
@@ -299,6 +341,9 @@ func reasons(user UserContext, c Candidate, matchedTopic string, boosted bool) [
 	}
 	if boosted {
 		out = append(out, "more_like_this")
+	}
+	if trending {
+		out = append(out, "trending_search")
 	}
 	if c.EngagedFollows > 0 {
 		out = append(out, "liked_by_follows")

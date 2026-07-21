@@ -28,15 +28,16 @@ they are policy, not ranking.
 ## Scoring
 
 ```
-score = freshness × (We·engagement + Wa·affinity + Wt·topic + Ws·social_proof) × modifiers
+score = freshness × (We·engagement + Wa·affinity + Wt·topic + Ws·social_proof + Wq·search_trend) × modifiers
 ```
 
 | Term | Definition | Default weight |
 |---|---|---|
 | engagement | `log10(1 + likes + 2·reposts + 2.5·bookmarks + 4·replies + views/100)`, normalized to saturate at `engagement_cap` | 0.35 |
 | affinity | viewer's decayed engagement history with the author (+`follow_bonus` if followed) | 0.30 |
-| topic | Jaccard overlap between viewer interests and post topics | 0.20 |
+| topic | Jaccard overlap between viewer interests ∪ `SearchInterests` (topics from the viewer's own searches) and post topics | 0.20 |
 | social_proof | engaged followed accounts / `social_proof_saturation` | 0.15 |
+| search_trend | best `TrendingTopics` heat among the post's topics — network-wide search interest, aggregated by the caller from all users' queries (see `MapQuery`) | 0.10 |
 | freshness | `exp(-age / tau)`, floored at `freshness_floor` | multiplier |
 
 Replies weigh most (conversation over passive likes — the same conclusion X
@@ -53,7 +54,8 @@ log damping stops viral posts from drowning small accounts.
 | moderation labels | configured per label, stack | `label_penalties`, e.g. `{"sensitive":0.5,"spam":0}` |
 | prolific-author damp | `sqrt(threshold/count)` above `prolific_damp_threshold`/24h | keeps quiet posters visible |
 | more-like-this | ×1.5 | explicit "show more like this" |
-| mentions the viewer | ×2 | `@you` |
+| mentions the viewer | ×2 | `Candidate.MentionsViewer` (detect with `ExtractMentions`) |
+| language mismatch | ×0.5 | post `Language` set, viewer `Languages` set, and no overlap; unknown language is never penalized |
 
 ## Page rules
 
@@ -67,10 +69,27 @@ log damping stops viral posts from drowning small accounts.
 
 ## Topics, not hashtags
 
-Ranking never consumes raw hashtags. `PostTopics` maps hashtags (English and
-Japanese aliases included, see `DefaultAliases`) onto a canonical taxonomy and
-falls back to the author's profile interests. Unmapped tags contribute
-nothing, so tag spam cannot game the topic term.
+Ranking never consumes raw hashtags. `PostTopics` maps hashtags onto a
+canonical taxonomy and falls back to the author's profile interests. Unmapped
+tags contribute nothing, so tag spam cannot game the topic term.
+`DefaultAliases` ships ~350 aliases across ten language groups (en, ja, ko,
+zh, es, hi, vi, fr, de, pt); extraction itself is Unicode-aware so any
+language's hashtags extract. `MapQuery` applies the same mapping to free-text
+search queries, and `ExtractMentions` pulls `@handles` (Unicode) for the
+mention boost.
+
+## Search as a signal
+
+Two search-derived inputs, both computed by the caller:
+
+- **Personal**: map the viewer's own recent search queries with `MapQuery`
+  and pass them as `SearchInterests` — they join profile interests in the
+  topic term. What you search for shapes your feed.
+- **Network-wide**: aggregate *all* users' queries (e.g. count per topic over
+  a sliding window, normalize to [0,1], decay) into `TrendingTopics` — posts
+  about what everyone is searching right now get the `search_trend` term and
+  the `trending_search` reason. Only aggregate counts are needed; individual
+  queries never reach the ranker.
 
 ## Feed profiles (algorithmic choice)
 
@@ -90,8 +109,8 @@ ranking pass for auditability.
 ## Explainability
 
 Every `Ranked` post carries `Reasons` (`followed_author`, `topic:music`,
-`liked_by_follows`, `mentions_you`, `more_like_this`, `trending`, `explore`,
-`popular`) and a `Breakdown` with each term, the freshness factor, the
+`liked_by_follows`, `mentions_you`, `more_like_this`, `trending_search`,
+`trending`, `explore`, `popular`) and a `Breakdown` with each term, the freshness factor, the
 combined modifier, and the final score — enough to render a "why am I seeing
 this?" panel without extra queries.
 

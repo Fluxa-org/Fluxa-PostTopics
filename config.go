@@ -11,6 +11,8 @@ type Weights struct {
 	Affinity    float64 `json:"affinity"`
 	Topic       float64 `json:"topic"`
 	SocialProof float64 `json:"social_proof"`
+	// Trending weights the network-wide search-heat term (UserContext.TrendingTopics).
+	Trending float64 `json:"trending"`
 }
 
 type EngagementWeights struct {
@@ -54,16 +56,20 @@ type Config struct {
 	MentionBoost          float64            `json:"mention_boost"`        // >= 1
 	ProlificDampThreshold int                `json:"prolific_damp_threshold"`
 	LabelPenalties        map[string]float64 `json:"label_penalties"`
+	// LanguageMismatchPenalty multiplies posts in a language the viewer does
+	// not read, in [0,1]; 1 disables language matching.
+	LanguageMismatchPenalty float64 `json:"language_mismatch_penalty"`
 }
 
 func DefaultConfig() Config {
 	return Config{
-		Version: "2026-07-21.default",
+		Version: "v0.2.0.default",
 		Weights: Weights{
 			Engagement:  0.35,
 			Affinity:    0.30,
 			Topic:       0.20,
 			SocialProof: 0.15,
+			Trending:    0.10,
 		},
 		Engagement: EngagementWeights{
 			Like:     1,
@@ -77,20 +83,21 @@ func DefaultConfig() Config {
 			NotInterestedTopic: 0.2,
 			ReplyToNonFollowed: 0.3,
 		},
-		EngagementCap:         10_000,
-		FreshnessTauHours:     8,
-		FreshnessFloor:        0.05,
-		MaxAgeHours:           168,
-		FollowBonus:           0.3,
-		SocialProofSaturation: 5,
-		AuthorCapPerPage:      2,
-		InNetworkTargetRatio:  0.5,
-		TopicRunCap:           2,
-		ExploreSlotEvery:      10,
-		MoreLikeThisBoost:     1.5,
-		MentionBoost:          2,
-		ProlificDampThreshold: 10,
-		LabelPenalties:        map[string]float64{},
+		EngagementCap:           10_000,
+		FreshnessTauHours:       8,
+		FreshnessFloor:          0.05,
+		MaxAgeHours:             168,
+		FollowBonus:             0.3,
+		SocialProofSaturation:   5,
+		AuthorCapPerPage:        2,
+		InNetworkTargetRatio:    0.5,
+		TopicRunCap:             2,
+		ExploreSlotEvery:        10,
+		MoreLikeThisBoost:       1.5,
+		MentionBoost:            2,
+		ProlificDampThreshold:   10,
+		LabelPenalties:          map[string]float64{},
+		LanguageMismatchPenalty: 0.5,
 	}
 }
 
@@ -111,10 +118,11 @@ func ConfigFromJSON(data []byte) (Config, error) {
 
 func (c Config) Validate() error {
 	switch {
-	case c.Weights.Engagement < 0 || c.Weights.Affinity < 0 ||
-		c.Weights.Topic < 0 || c.Weights.SocialProof < 0:
+	case c.Weights.Engagement < 0 || c.Weights.Affinity < 0 || c.Weights.Topic < 0 ||
+		c.Weights.SocialProof < 0 || c.Weights.Trending < 0:
 		return fmt.Errorf("feedrank: term weights must be >= 0")
-	case c.Weights.Engagement+c.Weights.Affinity+c.Weights.Topic+c.Weights.SocialProof <= 0:
+	case c.Weights.Engagement+c.Weights.Affinity+c.Weights.Topic+
+		c.Weights.SocialProof+c.Weights.Trending <= 0:
 		return fmt.Errorf("feedrank: at least one term weight must be > 0")
 	case c.EngagementCap <= 0:
 		return fmt.Errorf("feedrank: engagement_cap must be > 0")
@@ -142,6 +150,8 @@ func (c Config) Validate() error {
 		return fmt.Errorf("feedrank: mention_boost must be >= 1")
 	case c.ProlificDampThreshold < 0:
 		return fmt.Errorf("feedrank: prolific_damp_threshold must be >= 0")
+	case c.LanguageMismatchPenalty < 0 || c.LanguageMismatchPenalty > 1:
+		return fmt.Errorf("feedrank: language_mismatch_penalty must be in [0,1]")
 	}
 	for label, m := range c.LabelPenalties {
 		if m < 0 || m > 1 {

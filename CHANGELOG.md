@@ -4,6 +4,26 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] - 2026-07-21
+
+### Added
+- Search-trend term: `UserContext.TrendingTopics` (network-wide search heat
+  per topic, weight 0.10 default / 0.15 in `discover`) with the
+  `trending_search` reason, plus `UserContext.SearchInterests` — topics from
+  the viewer's own searches join the topic term.
+- `MapQuery`: maps free-text search queries onto canonical topics.
+- `ExtractMentions`: Unicode `@handle` extraction for the mention boost.
+- Language matching: `Post.Language` + `UserContext.Languages` +
+  `language_mismatch_penalty` (default ×0.5; unknown language never penalized).
+- Multilingual hashtag aliases: ko, zh, es, hi, vi, fr, de, pt added to the
+  existing en/ja table (~350 aliases total), restructured per language.
+
+### Changed
+- Config versions now follow the release (`v0.2.0.default`, …).
+- `Breakdown` gains a `trending` field; `Weights` gains `trending`.
+
+[0.2.0]: https://github.com/Fluxa-org/Fluxa-PostTopics/releases/tag/v0.2.0
+
 ## [0.1.0] - 2026-07-21
 
 Initial public release, extracted from the Fluxa monorepo.

@@ -446,7 +446,7 @@ func TestConfigFromJSON(t *testing.T) {
 		`{"in_network_target_ratio":1.5}`,
 		`{"topic_run_cap":1}`,
 		`{"explore_slot_every":1}`,
-		`{"weights":{"engagement":0,"affinity":0,"topic":0,"social_proof":0}}`,
+		`{"weights":{"engagement":0,"affinity":0,"topic":0,"social_proof":0,"trending":0}}`,
 	}
 	for _, raw := range invalid {
 		if _, err := ConfigFromJSON([]byte(raw)); err == nil {
