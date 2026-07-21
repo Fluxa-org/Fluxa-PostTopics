@@ -115,6 +115,7 @@ func TestTopicScore(t *testing.T) {
 
 func TestRankHardFilters(t *testing.T) {
 	cfg := DefaultConfig()
+	cfg.RelaxMaxAgeWhenSparse = false // keep the too-old drop observable
 	user := UserContext{
 		UserID:               "me",
 		NotInterestedAuthors: map[string]bool{"blocked-author": true},

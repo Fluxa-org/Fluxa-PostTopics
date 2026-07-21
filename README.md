@@ -99,6 +99,11 @@ of Bluesky's feed marketplace:
 | `for-you` | balanced default |
 | `discover` | engagement/recency-forward, aggressive exploration |
 | `quiet-posters` | surfaces followed accounts that post rarely |
+| `small-community` | for young/low-volume instances: 30-day window, gentle decay, strict anti-flooding |
+
+Low volume is a first-class case: when fresh posts can't fill a page the
+ranker readmits older ones instead of serving an empty feed, and with few
+posts it degrades gracefully toward a recency feed.
 
 ```go
 cfg := feedrank.BuiltinProfiles()["discover"]

@@ -112,17 +112,12 @@ func Rank(cfg Config, user UserContext, candidates []Candidate, now time.Time, p
 		return nil
 	}
 
-	maxAge := time.Duration(cfg.MaxAgeHours * float64(time.Hour))
-	scored := make([]Ranked, 0, len(candidates))
-	for _, c := range dedupe(candidates) {
-		switch {
-		case c.ID == "" || c.AuthorID == "":
-		case c.AuthorID == user.UserID:
-		case user.NotInterestedAuthors[c.AuthorID]:
-		case now.Sub(c.CreatedAt) > maxAge:
-		default:
-			scored = append(scored, score(cfg, user, c, now))
-		}
+	deduped := dedupe(candidates)
+	scored := collect(cfg, user, deduped, now, true)
+	if cfg.RelaxMaxAgeWhenSparse && len(scored) < pageSize {
+		// Sparse content: readmit age-expired posts (they score at the
+		// freshness floor) rather than serve a short or empty feed.
+		scored = collect(cfg, user, deduped, now, false)
 	}
 	if len(scored) == 0 {
 		return nil
@@ -137,6 +132,22 @@ func Rank(cfg Config, user UserContext, candidates []Candidate, now time.Time, p
 		injectExplore(cfg, user, page, scored, now)
 	}
 	return page
+}
+
+func collect(cfg Config, user UserContext, candidates []Candidate, now time.Time, enforceAge bool) []Ranked {
+	maxAge := time.Duration(cfg.MaxAgeHours * float64(time.Hour))
+	scored := make([]Ranked, 0, len(candidates))
+	for _, c := range candidates {
+		switch {
+		case c.ID == "" || c.AuthorID == "":
+		case c.AuthorID == user.UserID:
+		case user.NotInterestedAuthors[c.AuthorID]:
+		case enforceAge && now.Sub(c.CreatedAt) > maxAge:
+		default:
+			scored = append(scored, score(cfg, user, c, now))
+		}
+	}
+	return scored
 }
 
 // dedupe collapses same-ID candidates, keeping the highest-priority source

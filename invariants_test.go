@@ -80,6 +80,8 @@ func checkInvariants(t *testing.T, cfg Config, user UserContext, page []Ranked, 
 	}
 	maxAge := time.Duration(cfg.MaxAgeHours * float64(time.Hour))
 	seen := make(map[string]bool, len(page))
+	fresh := 0
+	expired := 0
 	for _, r := range page {
 		if seen[r.ID] {
 			t.Fatalf("duplicate post %s in page", r.ID)
@@ -92,7 +94,9 @@ func checkInvariants(t *testing.T, cfg Config, user UserContext, page []Ranked, 
 			t.Fatalf("not-interested author %s in page", r.AuthorID)
 		}
 		if testNow.Sub(r.CreatedAt) > maxAge {
-			t.Fatalf("expired post %s in page", r.ID)
+			expired++
+		} else {
+			fresh++
 		}
 		if r.Score < 0 || math.IsNaN(r.Score) || math.IsInf(r.Score, 0) {
 			t.Fatalf("invalid score %v for %s", r.Score, r.ID)
@@ -103,6 +107,16 @@ func checkInvariants(t *testing.T, cfg Config, user UserContext, page []Ranked, 
 		got := r.Breakdown.Freshness * r.Breakdown.Core * r.Breakdown.Penalty
 		if math.Abs(got-r.Score) > 1e-9 {
 			t.Fatalf("breakdown does not reproduce score for %s: %v vs %v", r.ID, got, r.Score)
+		}
+	}
+	// Expired posts are admitted only when the sparse relax fired, which
+	// implies fresh supply could not fill the page on its own.
+	if expired > 0 {
+		if !cfg.RelaxMaxAgeWhenSparse {
+			t.Fatalf("%d expired posts in page with sparse relax disabled", expired)
+		}
+		if fresh >= pageSize {
+			t.Fatalf("expired posts despite %d fresh posts filling the page", fresh)
 		}
 	}
 }

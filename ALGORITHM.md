@@ -25,6 +25,14 @@ candidates → dedupe → hard filters → score → order
 older than `max_age_hours`. Blocking/muting/visibility are the caller's job —
 they are policy, not ranking.
 
+**Sparse content**: when fresh candidates cannot fill a page,
+`relax_max_age_when_sparse` (default on) readmits age-expired posts — they
+score at the freshness floor, so fresh posts still lead, but a small or young
+community never sees an empty feed. With very low volume the algorithm
+degrades gracefully toward a recency feed: engagement terms go to zero and
+freshness plus interests dominate, which is the correct behavior for a
+network that is still growing.
+
 ## Scoring
 
 ```
@@ -99,8 +107,9 @@ marketplace. `BuiltinProfiles()` ships:
 | Profile | Character |
 |---|---|
 | `for-you` | the default balance above |
-| `discover` | engagement/recency-forward: tau 4 h, 30 % in-network, explore every 5th slot |
+| `discover` | engagement/recency-forward: tau 4 h, 30 % in-network, search-trend 0.15, explore every 5th slot |
 | `quiet-posters` | affinity-forward: tau 24 h, prolific damp threshold 2, no explore |
+| `small-community` | for low-volume instances (< ~20 posts/h): 30-day window, tau 48 h, prolific damp threshold 5, explore every 5th slot |
 
 Instances define their own with `ConfigFromJSON` (overlays the defaults,
 rejects unknown fields, validates ranges). Log `Config.Version` with every

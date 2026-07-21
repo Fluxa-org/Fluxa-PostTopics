@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-07-21
+
+### Added
+- Sparse-content handling: `relax_max_age_when_sparse` (default on) readmits
+  age-expired posts when fresh candidates cannot fill a page — small or young
+  communities never see an empty feed; fresh posts still rank first.
+- `small-community` builtin profile for low-volume instances: 30-day window,
+  48 h freshness decay, prolific damp threshold 5, explore every 5th slot.
+
+[0.3.0]: https://github.com/Fluxa-org/Fluxa-PostTopics/releases/tag/v0.3.0
+
 ## [0.2.0] - 2026-07-21
 
 ### Added

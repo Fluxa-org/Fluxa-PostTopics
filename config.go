@@ -59,11 +59,14 @@ type Config struct {
 	// LanguageMismatchPenalty multiplies posts in a language the viewer does
 	// not read, in [0,1]; 1 disables language matching.
 	LanguageMismatchPenalty float64 `json:"language_mismatch_penalty"`
+	// RelaxMaxAgeWhenSparse readmits age-expired posts when fresh candidates
+	// cannot fill a page, so small communities never see an empty feed.
+	RelaxMaxAgeWhenSparse bool `json:"relax_max_age_when_sparse"`
 }
 
 func DefaultConfig() Config {
 	return Config{
-		Version: "v0.2.0.default",
+		Version: "v0.3.0.default",
 		Weights: Weights{
 			Engagement:  0.35,
 			Affinity:    0.30,
@@ -98,6 +101,7 @@ func DefaultConfig() Config {
 		ProlificDampThreshold:   10,
 		LabelPenalties:          map[string]float64{},
 		LanguageMismatchPenalty: 0.5,
+		RelaxMaxAgeWhenSparse:   true,
 	}
 }
 
